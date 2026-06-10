@@ -8,12 +8,16 @@ Step-by-step flow ที่ข้าม service
 
 ใช้ template: `../templates/workflow.md`
 
-## Workflow ที่ควรเขียนก่อน
+## ที่เขียนแล้ว
 
-1. `payin-end-to-end.md` — merchant → 3rd-payment → queue → que_payment → provider → callback → outbound webhook
-2. `payout-end-to-end.md`
-3. `callback-inbound-flow.md` — provider hit → IPwhitelist → lock → update state → notify merchant
-4. `callback-outbound-retry-flow.md` — first send → fail → cron retry
-5. `slip-verify-flow.md`
-6. `reconciliation-flow.md` — `check/order` → fix state
-7. `manual-confirm-flow.md` — office staff confirm deposit ตกค้าง (status 99)
+- ✅ `payin-end-to-end.md` — merchant → QR → callback → settle → webhook (3 legs)
+- ✅ `payout-end-to-end.md` — create → confirm → queue → provider (two-phase + compensation)
+- ✅ `queue-task-lifecycle.md` — hybrid queue + dispatcher 8 types + ⚠️ poll path re-publish เข้า MQ
+
+## Workflow ที่เหลือ (เขียนเมื่อ rewrite แตะ)
+
+1. `callback-inbound-flow.md` — provider hit → IPwhitelist → lock → update state (บางส่วนอยู่ใน payin Leg B แล้ว)
+2. `callback-outbound-retry-flow.md` — ครอบคลุมแล้วใน `04-integrations/office-webhook.md` ส่วน Retry
+3. `slip-verify-flow.md`
+4. `reconciliation-flow.md` — `check/order` → fix state
+5. `manual-confirm-flow.md` — office confirm deposit ตกค้าง (status 99)

@@ -8,6 +8,13 @@ Cross-cutting DNA — pattern ที่ใช้ซ้ำข้าม provider 6
 
 ใช้ template: `../templates/feature-doc.md`
 
+## ที่เขียนแล้ว
+
+- ✅ `provider-matrix.md` — ตาราง provider × dimension ทั้ง 65 ตัว (auth, signature, callback, time format, error shape) — **อ่านก่อนออกแบบ Provider interface**
+- ✅ `config-plane.md` — schema `ServicePayment` + lookup flow + Indonesia flag + drift ระหว่าง repo
+- ✅ `order-state-machine.md` — สถานะ deposit (0/1/99) + withdraw (~10 ค่า) + callback_status พร้อม transition
+- ✅ `collection-ownership.md` — 19 collections ใครอ่าน/เขียน + shared-write 5 ตัว + dead collection
+
 ## Feature ที่ควรเขียนก่อน (เรียงตาม priority)
 
 1. `payin.md` — รับเงินเข้า (ครอบคลุม ~95% ของ provider)

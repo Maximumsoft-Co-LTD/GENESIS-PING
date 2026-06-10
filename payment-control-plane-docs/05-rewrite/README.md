@@ -6,12 +6,15 @@ last_reviewed: 2026-06-10
 
 เป้าหมายและขอบเขตของการ rewrite
 
-## ไฟล์ที่ควรมี
+## ที่เขียนแล้ว
 
-- `goals.md` — ทำไมต้อง rewrite (business case + tech debt)
-- `non-negotiables.md` — ของห้ามทิ้ง (อ้างอิงจาก RECAP.md ส่วน 7)
-- `kill-list.md` — ของตั้งใจทิ้ง (อ้างอิงจาก RECAP.md ส่วน 8)
-- `target-architecture.md` — โครงสร้างปลายทาง (จะมีหลังจากใช้ REWRITE-PROMPT แล้ว)
-- `migration-plan.md` — แผนย้าย provider ทีละตัว
+- ✅ `goals.md` — business case + เป้าหมาย + Definition of Done ของ docs package
+- ✅ `non-negotiables.md` — ของห้ามทิ้ง (ละเอียดกว่า RECAP ส่วน 7 — รวม findings จาก audit)
+- ✅ `kill-list.md` — ของตั้งใจทิ้ง (ละเอียดกว่า RECAP ส่วน 8 — รวม security findings)
+
+## จะมีหลังเริ่ม rewrite
+
+- `target-architecture.md` — output ของ REWRITE-PROMPT Phase 2
+- `migration-plan.md` — แผนย้าย provider ทีละตัว (Phase 4)
 
 > Phase 2 ของ REWRITE-PROMPT.md จะ output ไฟล์ `target-architecture.md` ให้

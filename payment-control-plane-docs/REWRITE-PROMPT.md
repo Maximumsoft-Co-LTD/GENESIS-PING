@@ -5,7 +5,7 @@ last_reviewed: 2026-06-10
 # REWRITE-PROMPT
 
 > **วิธีใช้:** copy ทุกอย่างใต้บรรทัด `═══════` ไปวางเป็น prompt แรกของ AI ตัวที่จะช่วย rewrite
-> AI ตัวนั้นไม่ต้องอ่าน file อื่นเลย — context ครบในตัว
+> Context สรุปครบในตัว prompt — แต่ถ้า AI เข้าถึง repo ได้ Phase 1 จะสั่งให้อ่าน docs package ใน `payment-control-plane-docs/` ก่อน (requirements ละเอียดพร้อม file:line)
 >
 > ใช้ได้กับ Claude, GPT-5, Gemini, ฯลฯ — model อะไรก็ตามที่ทำ code rewrite ได้
 >
@@ -181,7 +181,15 @@ Get answers, then propose architecture.
 ## Phase 1 — Understand (before any code)
 1. Confirm context: "Here's what I understood about your existing system: …" — let user correct.
 2. Ask the 9 questions above. **Do not skip.**
-3. Read these source files if you have repo access:
+3. **Read the documentation package FIRST** (in `payment-control-plane-docs/`) — it contains verified, code-referenced requirements:
+   - `02-features/provider-matrix.md` — all 65 providers × auth/callback/time/error dimensions
+   - `02-features/order-state-machine.md` — every status value + transition (deposit & withdraw)
+   - `02-features/config-plane.md` — full ServicePayment schema + lookup flow
+   - `02-features/collection-ownership.md` — 19 collections, who reads/writes, shared-write hazards
+   - `03-workflows/{payin,payout}-end-to-end.md`, `03-workflows/queue-task-lifecycle.md`
+   - `04-integrations/merchant-api.md` + `04-integrations/office-webhook.md` — **the two contracts you must not break**
+   - `05-rewrite/{goals,non-negotiables,kill-list}.md`
+4. Then read these source files if you have repo access:
    - `3rd-payment/app.go`, `3rd-payment/routes/main.go`, `3rd-payment/routes/bank-transfer-gateway.go`, `3rd-payment/routes/call-by-payment.go`
    - `3rd-payment/controller/deposit.go`, `3rd-payment/controller/callback.go`, `3rd-payment/controller/withdraw.go`
    - One full provider folder, e.g. `3rd-payment/controller/maanpay/` AND `que_payment/services/maanpay/`

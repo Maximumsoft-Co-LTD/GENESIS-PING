@@ -30,11 +30,11 @@ payment-control-plane-docs/
 ├── 01-source-repos/
 │   ├── 3rd-payment/README.md       ✅ route map ครบ (sync กับ routes/ แล้ว 2026-06-10)
 │   └── que_payment/README.md       ✅ queue + cronjob behavior
-├── 02-features/                    📭 ยังไม่ได้เติม — ใช้ template เติมทีหลัง
-├── 03-workflows/                   📭
-├── 04-integrations/                📭
-├── 05-rewrite/                     📭
-├── 06-adr/                         📭
+├── 02-features/                    ✅ provider-matrix, config-plane, order-state-machine, collection-ownership
+├── 03-workflows/                   ✅ payin, payout, queue-task-lifecycle (เหลือ flow ย่อย — ดู README)
+├── 04-integrations/                ✅ merchant-api, office-webhook (contracts ห้ามพัง)
+├── 05-rewrite/                     ✅ goals, non-negotiables, kill-list (target-architecture รอ Phase 2)
+├── 06-adr/                         📭 (จะมีเมื่อเริ่มตัดสินใจ design)
 └── templates/
     ├── service-doc.md              ✅
     ├── provider-doc.md             ✅
@@ -116,7 +116,7 @@ payment-control-plane-docs/
 1. **RabbitMQ** `QUE_PAYMENT_<NAME>` → `StartAMQPV2WithContext` → `QueTypeSwitchV2`
 2. **MongoDB poll** — `quepub.StartServV2` query collection `que_payment` ทุก 20 วินาที → worker pool 10 → `QueRunningV2`
 
-→ MongoDB ทำหน้าที่เป็น "queue สำรอง / outbox" — ถ้า RabbitMQ ล่มหรือข้อความหาย ของยังคงรันได้
+→ ⚠️ **แก้ความเข้าใจ (audit 2026-06-10):** poll path **ไม่ได้ประมวลผลเอง** — `QueRunningV2` ทำแค่ lock กระเป๋าแล้ว **re-publish กลับเข้า RabbitMQ** (`quepub/cornjob.go:202` → `rabbit.CallRabbitWithdraw`) ดังนั้น MongoDB เป็น "retry buffer ที่ feed กลับเข้า MQ" ไม่ใช่ queue สำรองอิสระ — **ถ้า RabbitMQ ล่ม งานไม่วิ่งทั้ง 2 ทาง** (ดู `03-workflows/queue-task-lifecycle.md`)
 
 ### Pattern เด่น
 
