@@ -16,10 +16,12 @@ last_reviewed: 2026-06-10
 
 | ถ้าคุณคือ... | อ่าน |
 |---|---|
+| ใครก็ตามที่จะ rewrite (คนหรือ AI) | **`DNA.md` ก่อน** — เอกสารแม่ สรุปทุกอย่าง + link ลงรายละเอียด |
 | คนใหม่ในทีม | `00-overview/system-context.md` → `00-overview/glossary.md` |
-| Dev ที่จะ rewrite | `RECAP.md` → `02-features/` → `05-rewrite/` |
+| Dev ที่จะ rewrite | `DNA.md` → `02-features/` → `05-rewrite/` |
 | คนที่จะใช้ AI สั่ง rewrite | `REWRITE-PROMPT.md` (copy ทั้งไฟล์) |
 | Claude (AI) | `CLAUDE.md` ก่อนเสมอ |
+| คนที่จะแกะ DNA **โปรเจคอื่น** | `templates/rewrite-dna.md` — pattern + methodology ใช้ซ้ำได้ |
 
 ## โครงสร้าง
 

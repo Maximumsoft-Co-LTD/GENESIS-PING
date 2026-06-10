@@ -20,6 +20,7 @@ last_reviewed: 2026-06-10
 ```
 payment-control-plane-docs/
 ├── README.md                       # entry
+├── DNA.md                          ✅ เอกสารแม่ — สรุป DNA ทั้งหมด + link (อ่านก่อนทุกไฟล์)
 ├── CLAUDE.md                       # คู่มือ Claude
 ├── RECAP.md                        # ไฟล์นี้
 ├── REWRITE-PROMPT.md               # prompt copy-paste ไปสั่ง AI
