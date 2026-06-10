@@ -1,3 +1,7 @@
+---
+last_reviewed: 2026-06-10
+---
+
 # CLAUDE.md — คู่มือสำหรับ Claude
 
 Repo นี้คือ **documentation control plane** สำหรับ:

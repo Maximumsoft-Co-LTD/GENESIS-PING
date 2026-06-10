@@ -1,3 +1,7 @@
+---
+last_reviewed: 2026-06-10
+---
+
 # RECAP — Payment Control Plane
 
 ไฟล์เดียวที่อ่านแล้วเข้าใจทุกอย่าง:
@@ -24,7 +28,7 @@ payment-control-plane-docs/
 │   ├── glossary.md                 ✅ เขียนแล้ว
 │   └── tech-stack.md               ✅ เขียนแล้ว
 ├── 01-source-repos/
-│   ├── 3rd-payment/README.md       ✅ route map ครบ
+│   ├── 3rd-payment/README.md       ✅ route map ครบ (sync กับ routes/ แล้ว 2026-06-10)
 │   └── que_payment/README.md       ✅ queue + cronjob behavior
 ├── 02-features/                    📭 ยังไม่ได้เติม — ใช้ template เติมทีหลัง
 ├── 03-workflows/                   📭
@@ -51,7 +55,8 @@ payment-control-plane-docs/
 
 ### Tech
 - Go + Gin (port 8081)
-- MongoDB (primary store), Redis (thorlock + cache), ClickHouse (event log), RabbitMQ (publish only)
+- MongoDB (primary store + event log collection `monitor_payment`), Redis (thorlock + cache), RabbitMQ (publish only)
+- ⚠️ **ไม่มี ClickHouse** — doc รุ่นก่อนเขียนว่า event log อยู่ ClickHouse `payment_events` แต่โค้ดจริงเขียนลง MongoDB `monitor_payment` (`observability/mongodb/writer.go:17`) และไม่มี ClickHouse dependency ใน go.mod ทั้ง 2 repo
 - OTel ผ่าน `Maximumsoft-Co-LTD/otelgo`, Prometheus, Telegram error bot + business bot
 
 ### Surface area (จำง่ายเป็น 7 กลุ่ม)
@@ -155,16 +160,17 @@ HTTP request   ──▶ accept
                                                       MongoDB write back   ──▶  3rd-payment reads
                                                       (statement, bank_summary)
 
-ทั้ง 2 repo → ClickHouse `payment_events` (async batch)
+ทั้ง 2 repo → MongoDB `monitor_payment` event log (async batch 1s/1000 rows)
 ทั้ง 2 repo → Telegram error bot (severity ≥ 2)
-ทั้ง 2 repo ใช้ thorlock บน Redis DB 18 ตัวเดียวกัน
+⚠️ thorlock (Redis DB 18) ใช้จริง**เฉพาะ 3rd-payment** — ฝั่ง que_payment มีแค่โค้ดที่ comment ทิ้งไว้
+   (`que_payment/services/bigpay/main.go:69`) → worker mutate state โดยไม่มี distributed lock (ดู open question ข้อ 9)
 ```
 
 ### Duplication ที่ต้องกำจัด
 
 | What | 3rd-payment | que_payment | ปัญหา |
 |---|---|---|---|
-| Provider integration code | `controller/<name>/` | `services/<name>/` | **มี ~60 provider ซ้ำ 2 ที่ — แก้ที่นึงต้องไปแก้อีกที่** |
+| Provider integration code | `controller/<name>/` (~67 ตัว) | `services/<name>/` (62 ตัว) | **มี 59 provider ซ้ำ 2 ที่ — แก้ที่นึงต้องไปแก้อีกที่** (~10 ตัวอยู่เฉพาะ 3rd-payment) |
 | MongoDB models | `model/*` (singular) | `models/*` (plural!) | naming inconsistent → import errors แฝง |
 | Observability init | similar | similar | duplicate init code |
 | Telegram notifier wiring | `helper.ErrorNotifier` | direct injection | binding pattern ไม่เหมือนกัน |
@@ -212,10 +218,10 @@ HTTP request   ──▶ accept
 
 ### Cross-cutting concerns ที่ใช้ทุกที่
 - **Idempotency key**: `payment_code + order_no`
-- **Distributed lock**: thorlock key per `payment_code + order_no` ก่อน mutate state
+- **Distributed lock**: thorlock key per `payment_code + order_no` ก่อน mutate state — ⚠️ เฉพาะฝั่ง 3rd-payment (que_payment ไม่มี lock)
 - **Error classification + severity 1-4** → Telegram
 - **OTel span**: `payment_code`, `queue_type` เป็น standard attribute
-- **ClickHouse `payment_events`**: ทุก error เขียนพร้อม trace_id, span_id
+- **MongoDB `monitor_payment` event log**: ทุก error เขียนพร้อม trace_id, span_id (ไม่ใช่ ClickHouse)
 - **MongoDB transaction boundary**: เกือบไม่ใช้ — เปลี่ยน state แล้วยิง downstream
 
 ---
@@ -260,7 +266,7 @@ HTTP request   ──▶ accept
    - Adapter factory โหลด config + return implementation
    - การเพิ่ม provider ใหม่ = เพิ่ม row ใน config + register adapter, ไม่ใช่แก้ route
 
-7. **Observability** — เก็บ pattern เดิม (OTel + ClickHouse + Telegram severity) แต่แยก library ออกเป็น shared module
+7. **Observability** — เก็บ pattern เดิม (OTel + Mongo event log + Telegram severity) แต่แยก library ออกเป็น shared module — ถ้าจะย้าย event log ไป ClickHouse จริงให้ตัดสินใจเป็น ADR ตอน rewrite
 
 ---
 
@@ -274,7 +280,7 @@ HTTP request   ──▶ accept
 - ✅ **Per-provider isolation** (1 queue / 1 provider) — ป้องกัน noisy neighbor
 - ✅ **Distributed lock ก่อน mutate** — เก็บ แต่ wrap ให้สั้นลง
 - ✅ **IP whitelist middleware** สำหรับ inbound callback — เก็บ
-- ✅ **ClickHouse async batch writer** (1s/1000 rows) — เก็บ pattern
+- ✅ **Async batch event writer** (1s/1000 rows → MongoDB `monitor_payment`) — เก็บ pattern (backend จะเป็น Mongo หรือ ClickHouse ค่อยตัดสินใจ)
 
 ---
 
@@ -289,7 +295,9 @@ HTTP request   ──▶ accept
 - ❌ **Inconsistent naming** (`model` vs `models`, `repository.New` vs `repository.NewPayment`)
 - ❌ **`/api/v2/get-statement-withdraw-by-orderNo` GET + POST batch variant** — เก็บ POST อย่างเดียว
 - ❌ **Inline test/debug endpoints** (`/update-report-test`, `/filter-report-test2`) ใน production routes
-- ❌ **Commented-out code** ใน routes (RouteBankTransferGateway มี comment block ใหญ่)
+- ❌ **Commented-out code** ใน routes (`routes/main.go:189-210` มี `RouteBankTransferGateway` เวอร์ชันตายทั้ง function — ตัวจริงอยู่ `routes/bank-transfer-gateway.go`)
+- ❌ **Legacy consumer V1 (`StartAMQP`)** ใน que_payment ที่ยังอยู่คู่กับ `StartAMQPV2WithContext` — entry point ใช้ V2 แล้ว
+- ❌ **โฟลเดอร์ `service/` (เอกพจน์) ใน que_payment** — เกือบร้าง มีแค่ `sudahpay` ตัวเดียว ซ้อนกับ `services/` (พหูพจน์)
 
 ---
 
@@ -305,3 +313,4 @@ HTTP request   ──▶ accept
 6. **Cronjob `CronjobStatement` ใน 3rd-payment** vs `que_payment` cronjobs — ทับซ้อนกันแค่ไหน?
 7. ปริมาณ traffic / throughput ที่ต้องรองรับ?
 8. ทีมที่ใช้งานปัจจุบันใหญ่แค่ไหน — มี on-call ไหม?
+9. **que_payment ไม่มี distributed lock ตอน mutate state** (thorlock ถูก comment ทิ้ง) — ตั้งใจหรือ bug? อาศัยแค่ 1 queue/provider + prefetch=1 กัน concurrency พอไหม? (poll mode มี worker pool 10 ตัว — ชนกันได้ไหม?)

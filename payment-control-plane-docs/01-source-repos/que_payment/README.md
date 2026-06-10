@@ -1,3 +1,7 @@
+---
+last_reviewed: 2026-06-10
+---
+
 # que_payment
 
 RabbitMQ consumer + cronjob worker (Go)
@@ -28,8 +32,9 @@ RabbitMQ consumer + cronjob worker (Go)
   }
   ```
 - Reply published with OTel trace context in AMQP headers
-- Error classification via `observability/classifier.Classify(...)` → writes to ClickHouse + sends Telegram alert if severity ≥ 2
+- Error classification via `observability/classifier.Classify(...)` → writes event ลง MongoDB `monitor_payment` + sends Telegram alert if severity ≥ 2
 - Auto-reconnect via `Reconnector()` goroutine
+- ⚠️ Legacy consumer V1 (`StartAMQP`) ยังอยู่ใน `rabbitmqpub/amqp.go` คู่กับ V2 — entry point ใช้ V2 (kill-list candidate)
 
 ### `TYPE=QUE_CRONJOB`
 Behavior switches by `PAYMENT_NAME`:
@@ -48,16 +53,17 @@ Behavior switches by `PAYMENT_NAME`:
 - This is **fallback / safety net** for RabbitMQ — items can be processed via either channel
 
 ## Init order
-1. OTel init (`observability.Init`)
-2. Telegram notifier
-3. MongoDB connection (timeout 30s)
-4. MongoDB writer (ClickHouse `payment_events`)
-5. Redis connection (timeout 30s)
-6. Branch by `TYPE`
+1. Sentry init (`_cmd/main.go:33-38`, env `SENTRY_DSN`) — repo นี้เท่านั้น
+2. OTel init (`observability.Init`)
+3. Telegram notifier
+4. MongoDB connection (timeout 30s)
+5. MongoDB event writer — collection `monitor_payment` (`observability/mongodb/writer.go:18`)
+6. Redis connection (timeout 30s)
+7. Branch by `TYPE`
 
 ## Folder layout
 ```
-services/          per-provider services (60+ folders) — ซ้ำกับ 3rd-payment/controller/
+services/          per-provider services (62 folders, 59 ตัวซ้ำกับ 3rd-payment/controller/)
                    (anypay, askmepay, maanpay, peer2pay, ...)
 controllers/       cross-cutting controllers
 cronjob/           RecoverBankSummary, AutomationRetryCallbackStatus, StartUpdateRedis,
@@ -80,3 +86,4 @@ _cmd/              cmd entry
 - **Per-provider service ซ้ำกับ 3rd-payment** — payment_code อันเดียวกัน, ทำสิ่งเดียวกัน, แต่คนละ repo → คือ pain point หลัก
 - **Cronjob branching ด้วย `PAYMENT_NAME` env** — ทำให้ deploy 1 image แต่หลายบทบาท → ขึ้นอยู่กับว่าตอน deploy ตั้ง env อะไร
 - **`shutdown.ShutdownManager`** — pattern ที่ดี — rewrite ใหม่ควรคงไว้
+- **⚠️ ไม่มี distributed lock** — thorlock ถูก comment ทิ้ง (`services/bigpay/main.go:69`) — worker mutate state โดยพึ่งแค่ 1 queue/provider + prefetch=1; ฝั่ง poll mode (worker pool 10) ไม่มีอะไรกัน concurrent เลย → ต้อง verify กับ owner ว่าตั้งใจหรือ bug

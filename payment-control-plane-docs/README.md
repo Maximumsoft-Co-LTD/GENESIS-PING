@@ -1,8 +1,12 @@
+---
+last_reviewed: 2026-06-10
+---
+
 # Payment Control Plane — Documentation
 
 ที่เก็บความรู้ของระบบ payment 2 ตัวที่กำลังจะ rewrite:
-- `3rd-payment` — HTTP front door + per-provider controller (~60 providers) + internal cronjob
-- `que_payment` — RabbitMQ consumer + 3 cronjob modes + per-provider service (~60 providers, ซ้ำกับด้านบน)
+- `3rd-payment` — HTTP front door + per-provider controller (~67 providers) + internal cronjob
+- `que_payment` — RabbitMQ consumer + 3 cronjob modes + per-provider service (62 providers — **59 ตัวซ้ำกับด้านบน**)
 
 **เป้าหมาย:** ถอด DNA ของทั้ง 2 repo ให้ Dev และ AI (Claude) เข้าใจตรงกัน ก่อนจะ rewrite ใหม่ (อาจรวมเป็น repo เดียว)
 

@@ -1,3 +1,7 @@
+---
+last_reviewed: 2026-06-10
+---
+
 # REWRITE-PROMPT
 
 > **วิธีใช้:** copy ทุกอย่างใต้บรรทัด `═══════` ไปวางเป็น prompt แรกของ AI ตัวที่จะช่วย rewrite
@@ -5,7 +9,7 @@
 >
 > ใช้ได้กับ Claude, GPT-5, Gemini, ฯลฯ — model อะไรก็ตามที่ทำ code rewrite ได้
 >
-> ก่อน copy: เติม `<<< ANSWER ME >>>` ทั้ง 8 ข้อใน "User Pre-Answers" ให้ครบ (ไม่งั้น AI จะถามกลับ)
+> ก่อน copy: เติม `<<< ANSWER ME >>>` ทั้ง 9 ข้อใน "User Pre-Answers" ให้ครบ (ไม่งั้น AI จะถามกลับ)
 
 ═══════════════════════════════════════════════════════════════
 
@@ -23,9 +27,9 @@ You are working with a senior developer who knows the existing system intimately
 
 # MISSION
 
-Rewrite two Go services that have grown organically into a tangled mess, into a clean, well-bounded payment platform. The two existing services are `3rd-payment` (HTTP front door) and `que_payment` (queue worker + cronjob). They serve ~60 external payment providers. The rewrite may merge them or keep them separated — that decision is on the table.
+Rewrite two Go services that have grown organically into a tangled mess, into a clean, well-bounded payment platform. The two existing services are `3rd-payment` (HTTP front door) and `que_payment` (queue worker + cronjob). They serve ~67 external payment providers (59 of them implemented in BOTH repos). The rewrite may merge them or keep them separated — that decision is on the table.
 
-You will produce: (a) target architecture, (b) module/folder layout, (c) Go interfaces and key types, (d) migration plan that ships value incrementally without a freeze, and (e) the first vertical slice of working code (one provider end-to-end). You will **not** rewrite all 60 providers — you will design the framework and demonstrate it with one.
+You will produce: (a) target architecture, (b) module/folder layout, (c) Go interfaces and key types, (d) migration plan that ships value incrementally without a freeze, and (e) the first vertical slice of working code (one provider end-to-end). You will **not** rewrite all ~67 providers — you will design the framework and demonstrate it with one.
 
 ---
 
@@ -39,7 +43,7 @@ You will produce: (a) target architecture, (b) module/folder layout, (c) Go inte
 - Routes grouped into 7 buckets: Order/Payin, Withdraw/Payout, Verify/Recheck, Balance/Statement/Report, Config/Admin, Office (manual), Dashboard+Bot
 - Special route groups: `/peer2pay/v3/*`, `/api/xpay/private/*`, `/bank-gateway/*`, and a dynamic provider passthrough `/call-pm/:paymentCode/*byPath`
 - Has its own internal cronjob entry (`StartCronjob` → `CronjobStatement`)
-- Contains per-provider controllers in `controller/<name>/` for ~60 providers
+- Contains per-provider controllers in `controller/<name>/` for ~67 providers
 
 ### `que_payment` (worker + cronjob)
 - Same Go runtime, no HTTP server
@@ -50,7 +54,7 @@ You will produce: (a) target architecture, (b) module/folder layout, (c) Go inte
     - `AUTOMATION_RETRY_CALLBACK_STATUS` → retries outbound webhooks
     - default → runs 3 goroutines: `StartUpdateRedis`, `ServRetryOrder`, `quepub.StartServV2`
 - `quepub.StartServV2` polls MongoDB collection `que_payment` every 20s with a worker pool of 10 (30s timeout per task). This is a **second channel** for the same work that RabbitMQ carries — a hybrid queue.
-- Contains per-provider services in `services/<name>/` for ~60 providers — **duplicate of the 3rd-payment provider code**
+- Contains per-provider services in `services/<name>/` for 62 providers — **59 of them duplicate the 3rd-payment provider code**
 
 ## RabbitMQ message contract (the wire format between them)
 ```go
@@ -72,12 +76,12 @@ type ResQue struct {
 
 ## Shared infrastructure
 - **MongoDB** — primary store. Collections: `statement`, `bank_summary`, `service_payment`, `config_payment`, `que_payment` (queue table), `bot_telegram`, `logs_callback_payment`, `logs_bank_gateway`, etc.
-- **Redis** — distributed lock (thorlock, DB 18, wait/lease 180s) + cache
+- **Redis** — distributed lock (thorlock, DB 18, wait/lease 180s) + cache. **IMPORTANT GAP**: thorlock is only actually used in `3rd-payment`. In `que_payment` it is commented out (`services/bigpay/main.go:69`) — the worker mutates state with no distributed lock, relying only on one-queue-per-provider + prefetch=1 (and nothing at all in the Mongo-poll path, which runs a pool of 10 workers). Treat this as a question for the user: intentional or latent bug?
 - **RabbitMQ** — work queue, one queue per provider
-- **ClickHouse** — table `payment_events` (MergeTree, partition by `toYYYYMM(event_time)`, order by `(payment_code, event_time)`). Async batched writes (1s or 1000 rows). Written from **both** services.
+- **MongoDB event log** — collection `monitor_payment`, async batched writes (1s or 1000 rows, `observability/mongodb/writer.go`). Written from **both** services. (Earlier docs claimed this was a ClickHouse table `payment_events` — ClickHouse does not exist anywhere in either codebase.)
 - **OpenTelemetry** via `github.com/Maximumsoft-Co-LTD/otelgo/eto` — HTTP middleware + AMQP header propagation
 - **Telegram** alerting with severity 1-4:
-  - 1=info (log+ClickHouse only)
+  - 1=info (log + event collection only)
   - 2-3=warn/error (Telegram regular chat, rate-limit 1 msg/s, dedup 5min on `hash(severity+payment_code+error_type)`)
   - 4=critical (on-call chat, no rate-limit)
 - **Prometheus** — gin middleware (3rd-payment only)
@@ -104,7 +108,7 @@ Not every provider exposes every verb. Some have one-link callback (`/callback-o
 ## Duplication map (what's broken)
 | Concern | 3rd-payment | que_payment | Issue |
 |---|---|---|---|
-| Provider integration | `controller/<name>/` | `services/<name>/` | ~60 providers, code duplicated and drifts |
+| Provider integration | `controller/<name>/` (~67) | `services/<name>/` (62) | 59 providers duplicated, code drifts; ~10 exist only in 3rd-payment |
 | Models | `model/*` (singular) | `models/*` (plural) | inconsistent |
 | Repo constructor | `repository.New(*conn)` | `repository.NewPayment(conn)` | inconsistent |
 | Mongo connection | no ctx | with ctx | API drift |
@@ -121,7 +125,7 @@ In rough priority order:
 2. **Make adding a new provider a known, ~1-day job.** Today it requires editing routes, controllers, services, configs across two repos.
 3. **Idempotency as a first-class primitive.** Every state-mutating call has an idempotency key; replays are safe by construction.
 4. **Reliable outbound webhook delivery to merchants.** With retries, dead-letter, and a UI to inspect.
-5. **Keep the operational good stuff.** OTel propagation, severity-based Telegram, ClickHouse event log, distributed lock — all of those work, don't reinvent them.
+5. **Keep the operational good stuff.** OTel propagation, severity-based Telegram, the async-batched event log, distributed lock — all of those work, don't reinvent them.
 6. **Reduce surface area.** Side-by-side V1/V2 routes, provider-specific URL variants, ad-hoc debug endpoints — cut.
 7. **No big-bang migration.** Ship the new system behind a feature flag per provider, route traffic gradually, decommission the old code path provider-by-provider.
 
@@ -131,12 +135,12 @@ In rough priority order:
 
 - OTel trace context propagation across HTTP + AMQP (use `amqpcarrier`-equivalent for whatever queue you choose)
 - Severity 1-4 Telegram alerting with 5-min dedup
-- ClickHouse `payment_events` table or its successor (event log is load-bearing for ops)
+- The `monitor_payment` event log or its successor (event log is load-bearing for ops; today it lives in MongoDB — ClickHouse is a candidate successor, not the current state)
 - Per-provider queue isolation (one provider's bad day doesn't block others)
-- Distributed lock around provider mutations on the same key
+- Distributed lock around provider mutations on the same key (today only enforced in 3rd-payment — the rewrite must enforce it on the worker path too)
 - IP whitelist (or stronger: HMAC verify) for inbound callbacks
 - Graceful shutdown via something like `que_payment`'s `ShutdownManager`
-- ClickHouse async batched writer pattern (1s / 1000 rows)
+- Async batched event-writer pattern (1s / 1000 rows)
 
 ---
 
@@ -148,7 +152,9 @@ In rough priority order:
 - MongoDB-as-queue polling (the `quepub.StartServV2` hybrid) → replace with Outbox pattern (write DB tx + queue publish in one tx)
 - Inconsistent naming: `model` vs `models`, `repository.New` vs `repository.NewPayment` — pick one
 - Test/debug endpoints embedded in prod routes (`/update-report-test`, `/filter-report-test2`)
-- Commented-out code blocks in routes files
+- Commented-out code blocks in routes files (e.g. the dead `RouteBankTransferGateway` copy in `routes/main.go` — the live one is in `routes/bank-transfer-gateway.go`)
+- Legacy V1 consumer `StartAMQP` in que_payment (entry point already uses `StartAMQPV2WithContext`)
+- que_payment's near-empty `service/` (singular) folder — only `sudahpay` lives there, beside the real `services/` (plural)
 
 ---
 
@@ -157,13 +163,14 @@ In rough priority order:
 Do NOT make these decisions silently — surface them to the user and wait:
 
 1. **One repo or two?** Monorepo with `cmd/gateway` + `cmd/worker` + shared `internal/`, or two separate repos sharing a published Go module?
-2. **Provider count after rewrite** — are all ~60 still in use, or is there a kill list of providers too?
+2. **Provider count after rewrite** — are all ~67 still in use, or is there a kill list of providers too? (~10 exist only in 3rd-payment — dead or HTTP-only?)
 3. **Indonesia config split** (`create-indo-config-payment`) — separate product line, or just a flag?
 4. **Outbound webhook signing** — current system relies on IP whitelist from provider side; for our outbound to merchants, do we sign with HMAC? What key rotation strategy?
 5. **Database** — stay on MongoDB, or migrate to Postgres? (Outbox pattern is much cleaner on Postgres.)
 6. **Queue** — stay on RabbitMQ, or move to NATS/Redis Streams/Kafka? RabbitMQ is fine but per-provider-queue is unusual.
 7. **Multi-tenant model** — what's the right unit: `service` (merchant), `payment_code` (provider), or `(service, payment_code)` tuple?
 8. **Reconciliation source of truth** — when our DB and the provider disagree, who wins? Today the answer is implicit in cron code.
+9. **Worker-side locking** — que_payment currently runs with NO distributed lock (thorlock is commented out there). Intentional (queue isolation is considered enough) or a latent bug? The answer changes the concurrency design.
 
 Get answers, then propose architecture.
 
@@ -173,7 +180,7 @@ Get answers, then propose architecture.
 
 ## Phase 1 — Understand (before any code)
 1. Confirm context: "Here's what I understood about your existing system: …" — let user correct.
-2. Ask the 8 questions above. **Do not skip.**
+2. Ask the 9 questions above. **Do not skip.**
 3. Read these source files if you have repo access:
    - `3rd-payment/app.go`, `3rd-payment/routes/main.go`, `3rd-payment/routes/bank-transfer-gateway.go`, `3rd-payment/routes/call-by-payment.go`
    - `3rd-payment/controller/deposit.go`, `3rd-payment/controller/callback.go`, `3rd-payment/controller/withdraw.go`
@@ -203,7 +210,7 @@ Pick the simplest provider the user identifies. Implement:
 - Worker consume + provider callback handling
 - Outbound webhook to merchant
 - Reconciliation cron
-- OTel + ClickHouse + Telegram wiring
+- OTel + event log + Telegram wiring
 - A real integration test against a fake provider
 
 This slice is the template. The user reviews it. Then the remaining providers get ported provider-by-provider.
@@ -254,7 +261,7 @@ Do not write code while undecided. Do not pick the more interesting option to wr
 When user replies "go", produce in order:
 
 1. A 5-line summary of what you understood
-2. The 8 questions, numbered, expecting their answers
+2. The 9 questions, numbered, expecting their answers
 3. (after answers) Phase 2 deliverable as one markdown doc
 4. (after sign-off) Phase 3 first commit as a directory tree + key files
 
@@ -265,13 +272,14 @@ When user replies "go", produce in order:
 Edit these `<<< ANSWER ME >>>` blocks before pasting this prompt. If left as-is, the AI will pause at Phase 1 to ask you.
 
 - **Q1 One repo or two?** <<< ANSWER ME >>>
-- **Q2 Provider kill list (which of the 60 to drop)?** <<< ANSWER ME >>>
+- **Q2 Provider kill list (which of the ~67 to drop)?** <<< ANSWER ME >>>
 - **Q3 Indonesia config — separate product or flag?** <<< ANSWER ME >>>
 - **Q4 Outbound webhook signing strategy?** <<< ANSWER ME >>>
 - **Q5 Stay on MongoDB or migrate to Postgres?** <<< ANSWER ME >>>
 - **Q6 Queue — stay on RabbitMQ?** <<< ANSWER ME >>>
 - **Q7 Multi-tenant unit — `service`, `payment_code`, or tuple?** <<< ANSWER ME >>>
 - **Q8 Source of truth on reconciliation conflict?** <<< ANSWER ME >>>
+- **Q9 Worker-side locking — intentional gap or bug?** <<< ANSWER ME >>>
 
 ---
 
@@ -289,10 +297,10 @@ Confirm I should start with Phase 1 (read source + ask questions), or jump to Ph
 ## หมายเหตุท้ายไฟล์ (สำหรับคุณ, ไม่ใช่สำหรับ AI)
 
 - **ทำไม prompt ยาว:** เพราะมันต้องทำหน้าที่ทั้ง brief + guardrail + decision-forcing checklist
-- **ทำไมมี Q1-Q8:** ถ้าไม่ pin ไว้ AI จะตัดสินใจเองและออกไปทาง over-engineering
+- **ทำไมมี Q1-Q9:** ถ้าไม่ pin ไว้ AI จะตัดสินใจเองและออกไปทาง over-engineering
 - **เปลี่ยน model ได้:** prompt นี้ neutral — ไม่ผูกกับ Claude
 - **ใช้กับ codebase อื่นได้ไหม:** ไม่ — มี context เฉพาะของ 2 repo นี้เยอะ. ถ้าจะ rewrite project อื่นต้อง regenerate
 - **อัปเดต prompt เมื่อไหร่:**
-  - หลังตอบ Q1-Q8 แล้ว → ลบ "USER PRE-ANSWERS" และ "QUESTIONS YOU MUST ASK", ใส่คำตอบเป็น "DECISIONS ALREADY MADE"
+  - หลังตอบ Q1-Q9 แล้ว → ลบ "USER PRE-ANSWERS" และ "QUESTIONS YOU MUST ASK", ใส่คำตอบเป็น "DECISIONS ALREADY MADE"
   - หลัง Phase 2 sign-off → เก็บ Phase 2 doc แยก, prompt รุ่นถัดไปอ้างถึงมันได้
   - หลัง vertical slice → prompt รุ่นถัดไปไม่ต้องอธิบาย architecture ซ้ำ — ชี้ไปที่ slice แทน

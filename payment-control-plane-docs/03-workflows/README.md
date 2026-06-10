@@ -1,3 +1,7 @@
+---
+last_reviewed: 2026-06-10
+---
+
 # 03-workflows
 
 Step-by-step flow ที่ข้าม service

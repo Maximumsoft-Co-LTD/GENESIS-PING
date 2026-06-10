@@ -1,3 +1,7 @@
+---
+last_reviewed: 2026-06-10
+---
+
 # System Context
 
 ## ใครคุยกับใคร
@@ -28,8 +32,8 @@
                                               │  (60+ adapters)      │
                                               └──────────────────────┘
                        ┌─────────────────────┐
-                       │   ClickHouse        │◀── เขียน event/error
-                       │  payment_events     │    จากทั้ง 2 repo
+                       │ MongoDB collection  │◀── เขียน event/error
+                       │  monitor_payment    │    จากทั้ง 2 repo (async batch)
                        └─────────────────────┘
                        ┌─────────────────────┐
                        │   Telegram Bot      │◀── alert severity ≥ 2
@@ -41,7 +45,7 @@
 
 ### 3rd-payment
 - **Front door** — รับ request จาก merchant และ callback จาก provider
-- มี **per-provider controller** ของตัวเอง (~60 ตัว) ใน `controller/<name>/`
+- มี **per-provider controller** ของตัวเอง (~67 ตัว) ใน `controller/<name>/`
 - มี HTTP route หลายกลุ่ม: `/api/v2/*`, `/peer2pay/v3/*`, `/api/xpay/private/*`, `/bank-gateway/*`, `/call-pm/*`
 - มี dynamic provider route: `/call-pm/:paymentCode/*byPath` (route ตาม `payment_code` ตรงๆ)
 - มี internal cronjob: `StartCronjob` → `CronjobStatement`
@@ -49,7 +53,7 @@
 
 ### que_payment
 - **Worker** — กิน RabbitMQ + รัน cronjob 3 แบบ
-- มี **per-provider service** ของตัวเอง (~60 ตัว) ใน `services/<name>/` — **ซ้ำกับ 3rd-payment**
+- มี **per-provider service** ของตัวเอง (62 ตัว) ใน `services/<name>/` — **59 ตัวซ้ำกับ 3rd-payment**
 - 2 mode ผ่าน env `TYPE`:
   - `QUE_RABBIT` — consumer ของ `QUE_PAYMENT_<PAYMENT_NAME>`
   - `QUE_CRONJOB` — มี 3 sub-mode ตาม `PAYMENT_NAME`:
@@ -66,7 +70,7 @@
 | RabbitMQ queue `QUE_PAYMENT_<NAME>` | 3rd → que | `ReqQue{ID, Service, Type, TypeReport, Date, PaymentCode}` → `ResQue{Code, Message}` |
 | MongoDB `que_payment` collection | 3rd writes → que reads | poll mode fallback |
 | MongoDB shared collections | both R/W | `statement`, `bank_summary`, `service_payment`, etc. |
-| ClickHouse `payment_events` | both write | async batch (1s / 1000 rows) |
+| MongoDB `monitor_payment` (event log) | both write | async batch (1s / 1000 rows) — `observability/mongodb/writer.go` |
 | Telegram alert | both publish | severity 1-4 |
 
 ## Stakeholder

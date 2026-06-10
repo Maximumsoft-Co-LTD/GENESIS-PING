@@ -1,3 +1,7 @@
+---
+last_reviewed: 2026-06-10
+---
+
 # 02-features
 
 Cross-cutting DNA — pattern ที่ใช้ซ้ำข้าม provider 60+ ตัว
@@ -11,7 +15,7 @@ Cross-cutting DNA — pattern ที่ใช้ซ้ำข้าม provider 6
 3. `callback-inbound.md` — รับ webhook จาก provider
 4. `callback-outbound.md` — ส่ง webhook ไปยัง merchant office
 5. `idempotency.md` — pattern กลางสำหรับทุก state-mutating op
-6. `distributed-lock.md` — thorlock pattern
+6. `distributed-lock.md` — thorlock pattern (⚠️ ใช้จริงเฉพาะ 3rd-payment — ฝั่ง que_payment ไม่มี lock)
 7. `slip-verification.md` — verifySlip + first2pay
 8. `qr-generation.md` — genQrImage
 9. `balance-check.md` — balance + bank_summary
