@@ -1,0 +1,22 @@
+# Secrets / config
+.env
+*.env
+config.yaml
+azpay.json
+
+# Dependencies
+node_modules/
+
+# IDE / tooling
+.idea/
+.vscode/
+.claude/
+.agents/
+
+# Build / generated
+_apidoc/
+*.log
+
+# Nested repositories (keep their own git history)
+/3rd-payment/
+/que_payment/
